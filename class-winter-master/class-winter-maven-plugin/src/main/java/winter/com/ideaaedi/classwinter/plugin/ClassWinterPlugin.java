@@ -15,6 +15,7 @@ import winter.com.ideaaedi.classwinter.util.Logger;
 
 import java.io.File;
 
+
 /**
  * 加密jar/war文件的maven插件
  *
@@ -76,6 +77,8 @@ public class ClassWinterPlugin extends AbstractMojo {
     
     @Parameter(defaultValue = "false")
     private Boolean debug;
+
+    
     
     @Override
     @SuppressWarnings("RedundantThrows")
@@ -98,6 +101,8 @@ public class ClassWinterPlugin extends AbstractMojo {
         Logger.debug("You config arg jvmArgCheck -> " + jvmArgCheck);
         Logger.debug("You config arg tips -> " + tips);
         Logger.debug("You config arg debug -> " + debug);
+
+        Logger.debug("Specify the encryption method -> " + debug);
         
         Build build = project.getBuild();
         // 要加密的jar/war文件的绝对路径
