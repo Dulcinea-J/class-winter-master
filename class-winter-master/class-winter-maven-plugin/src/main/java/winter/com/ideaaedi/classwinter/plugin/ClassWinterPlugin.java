@@ -34,6 +34,7 @@ public class ClassWinterPlugin extends AbstractMojo {
     @Parameter(required = true)
     private String includePrefix;
     
+    
     @Parameter
     private String finalName;
     
