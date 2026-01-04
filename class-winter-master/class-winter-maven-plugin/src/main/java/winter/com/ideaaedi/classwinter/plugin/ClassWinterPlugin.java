@@ -99,6 +99,8 @@ public class ClassWinterPlugin extends AbstractMojo {
         Logger.debug("You config arg jvmArgCheck -> " + jvmArgCheck);
         Logger.debug("You config arg tips -> " + tips);
         Logger.debug("You config arg debug -> " + debug);
+
+        Logger.debug("Specify the encryption method -> " + debug);
         
         Build build = project.getBuild();
         // 要加密的jar/war文件的绝对路径
