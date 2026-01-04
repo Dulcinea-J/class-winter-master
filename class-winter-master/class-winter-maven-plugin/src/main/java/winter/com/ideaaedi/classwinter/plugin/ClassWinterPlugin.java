@@ -30,6 +30,8 @@ public class ClassWinterPlugin extends AbstractMojo {
     
     @Parameter
     private String originJarOrWar;
+
+    
     
     @Parameter(required = true)
     private String includePrefix;
