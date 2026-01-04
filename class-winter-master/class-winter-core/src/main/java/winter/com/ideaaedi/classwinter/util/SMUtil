@@ -1,0 +1,293 @@
+package winter.com.ideaaedi.classwinter.util;
+
+import org.bouncycastle.asn1.gm.GMNamedCurves;
+import org.bouncycastle.asn1.x9.X9ECParameters;
+import org.bouncycastle.crypto.*;
+import org.bouncycastle.crypto.engines.SM4Engine;
+import org.bouncycastle.crypto.modes.CBCBlockCipher;
+import org.bouncycastle.crypto.paddings.PKCS7Padding;
+import org.bouncycastle.crypto.paddings.PaddedBufferedBlockCipher;
+import org.bouncycastle.crypto.params.*;
+import org.bouncycastle.crypto.signers.SM2Signer;
+import org.bouncycastle.crypto.util.PrivateKeyFactory;
+import org.bouncycastle.crypto.util.PublicKeyFactory;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.math.ec.ECPoint;
+import org.bouncycastle.util.encoders.Hex;
+
+import java.nio.charset.StandardCharsets;
+import java.security.*;
+import java.security.spec.ECGenParameterSpec;
+
+/**
+ * 国密算法工具类（SM2/SM3/SM4）
+ * 依赖BouncyCastle库，需提前引入
+ */
+public class SMUtil {
+    // 注册BouncyCastle提供者（静态代码块，仅初始化一次）
+    static {
+        if (Security.getProvider(BouncyCastleProvider.PROVIDER_NAME) == null) {
+            Security.addProvider(new BouncyCastleProvider());
+        }
+    }
+
+    // ===================== SM3 哈希算法 =====================
+    /**
+     * SM3哈希计算（返回16进制字符串）
+     * @param data 原始字符串
+     * @return 32字节（64位16进制）哈希值
+     */
+    public static String sm3(String data) {
+        return sm3(data.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * SM3哈希计算（返回16进制字符串）
+     * @param data 原始字节数组
+     * @return 32字节（64位16进制）哈希值
+     */
+    public static String sm3(byte[] data) {
+        Digest digest = new org.bouncycastle.crypto.digests.SM3Digest();
+        digest.update(data, 0, data.length);
+        byte[] result = new byte[digest.getDigestSize()];
+        digest.doFinal(result, 0);
+        return Hex.toHexString(result);
+    }
+
+    // ===================== SM2 非对称算法 =====================
+    /**
+     * 生成SM2密钥对
+     * @return SM2密钥对（私钥+公钥）
+     * @throws NoSuchAlgorithmException 算法不存在异常
+     * @throws InvalidAlgorithmParameterException 参数异常
+     */
+    public static KeyPair generateSM2KeyPair() throws NoSuchAlgorithmException, InvalidAlgorithmParameterException, NoSuchProviderException {
+        KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("EC", "BC");
+        ECGenParameterSpec ecGenParameterSpec = new ECGenParameterSpec("sm2p256v1");
+        keyPairGenerator.initialize(ecGenParameterSpec);
+        return keyPairGenerator.generateKeyPair();
+    }
+
+    /**
+     * SM2签名（返回16进制签名串）
+     * @param privateKey SM2私钥
+     * @param data 待签名字符串
+     * @return 16进制签名结果
+     * @throws Exception 签名异常
+     */
+    public static String sm2Sign(PrivateKey privateKey, String data) throws Exception {
+        return sm2Sign(privateKey, data.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * SM2签名（返回16进制签名串）
+     * @param privateKey SM2私钥
+     * @param data 待签名字节数组
+     * @return 16进制签名结果
+     * @throws Exception 签名异常
+     */
+    public static String sm2Sign(PrivateKey privateKey, byte[] data) throws Exception {
+        X9ECParameters ecParams = GMNamedCurves.getByName("sm2p256v1");
+        ECDomainParameters domainParams = new ECDomainParameters(ecParams.getCurve(), ecParams.getG(), ecParams.getN());
+        ECPrivateKeyParameters privateKeyParams = (ECPrivateKeyParameters) PrivateKeyFactory.createKey(privateKey.getEncoded());
+
+        SM2Signer signer = new SM2Signer();
+        signer.init(true, new ParametersWithID(new ECPrivateKeyParameters(privateKeyParams.getD(), domainParams), "1234567812345678".getBytes()));
+        signer.update(data, 0, data.length);
+        byte[] signBytes = signer.generateSignature();
+        return Hex.toHexString(signBytes);
+    }
+
+    /**
+     * SM2验签
+     * @param publicKey SM2公钥
+     * @param data 原始字符串
+     * @param sign 16进制签名串
+     * @return true=验签成功，false=验签失败
+     * @throws Exception 验签异常
+     */
+    public static boolean sm2Verify(PublicKey publicKey, String data, String sign) throws Exception {
+        return sm2Verify(publicKey, data.getBytes(StandardCharsets.UTF_8), sign);
+    }
+
+    /**
+     * SM2验签
+     * @param publicKey SM2公钥
+     * @param data 原始字节数组
+     * @param sign 16进制签名串
+     * @return true=验签成功，false=验签失败
+     * @throws Exception 验签异常
+     */
+    public static boolean sm2Verify(PublicKey publicKey, byte[] data, String sign) throws Exception {
+        X9ECParameters ecParams = GMNamedCurves.getByName("sm2p256v1");
+        ECDomainParameters domainParams = new ECDomainParameters(ecParams.getCurve(), ecParams.getG(), ecParams.getN());
+        ECPublicKeyParameters publicKeyParams = (ECPublicKeyParameters) PublicKeyFactory.createKey(publicKey.getEncoded());
+
+        SM2Signer signer = new SM2Signer();
+        signer.init(false, new ParametersWithID(new ECPublicKeyParameters(publicKeyParams.getQ(), domainParams), "1234567812345678".getBytes()));
+        signer.update(data, 0, data.length);
+        byte[] signBytes = Hex.decode(sign);
+        return signer.verifySignature(signBytes);
+    }
+
+    // ===================== SM4 对称算法 =====================
+    /**
+     * SM4-ECB模式加密（返回16进制字符串）
+     * @param key 密钥（16字节，如：1234567890abcdef）
+     * @param data 待加密字符串
+     * @return 16进制加密结果
+     * @throws Exception 加密异常
+     */
+    public static String sm4EcbEncrypt(String key, String data) throws Exception {
+        return sm4EcbEncrypt(key.getBytes(StandardCharsets.UTF_8), data.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * SM4-ECB模式加密（返回16进制字符串）
+     * @param key 密钥（16字节）
+     * @param data 待加密字节数组
+     * @return 16进制加密结果
+     * @throws Exception 加密异常
+     */
+    public static String sm4EcbEncrypt(byte[] key, byte[] data) throws Exception {
+        KeyParameter keyParameter = new KeyParameter(key);
+        PaddedBufferedBlockCipher cipher = new PaddedBufferedBlockCipher(new SM4Engine(), new PKCS7Padding());
+        cipher.init(true, keyParameter);
+        return processData(cipher, data);
+    }
+
+    /**
+     * SM4-ECB模式解密（16进制密文转明文）
+     * @param key 密钥（16字节，如：1234567890abcdef）
+     * @param cipherHex 16进制加密串
+     * @return 解密后的明文
+     * @throws Exception 解密异常
+     */
+    public static String sm4EcbDecrypt(String key, String cipherHex) throws Exception {
+        byte[] cipherData = Hex.decode(cipherHex);
+        byte[] plainData = sm4EcbDecrypt(key.getBytes(StandardCharsets.UTF_8), cipherData);
+        return new String(plainData, StandardCharsets.UTF_8);
+    }
+
+    /**
+     * SM4-ECB模式解密
+     * @param key 密钥（16字节）
+     * @param cipherData 加密字节数组
+     * @return 解密后的字节数组
+     * @throws Exception 解密异常
+     */
+    public static byte[] sm4EcbDecrypt(byte[] key, byte[] cipherData) throws Exception {
+        KeyParameter keyParameter = new KeyParameter(key);
+        PaddedBufferedBlockCipher cipher = new PaddedBufferedBlockCipher(new SM4Engine(), new PKCS7Padding());
+        cipher.init(false, keyParameter);
+        return Hex.decode(processData(cipher, cipherData));
+    }
+
+    /**
+     * SM4-CBC模式加密（返回16进制字符串）
+     * @param key 密钥（16字节）
+     * @param iv 初始化向量（16字节）
+     * @param data 待加密字符串
+     * @return 16进制加密结果
+     * @throws Exception 加密异常
+     */
+    public static String sm4CbcEncrypt(String key, String iv, String data) throws Exception {
+        return sm4CbcEncrypt(
+                key.getBytes(StandardCharsets.UTF_8),
+                iv.getBytes(StandardCharsets.UTF_8),
+                data.getBytes(StandardCharsets.UTF_8)
+        );
+    }
+
+    /**
+     * SM4-CBC模式加密（返回16进制字符串）
+     * @param key 密钥（16字节）
+     * @param iv 初始化向量（16字节）
+     * @param data 待加密字节数组
+     * @return 16进制加密结果
+     * @throws Exception 加密异常
+     */
+    public static String sm4CbcEncrypt(byte[] key, byte[] iv, byte[] data) throws Exception {
+        KeyParameter keyParameter = new KeyParameter(key);
+        ParametersWithIV parametersWithIV = new ParametersWithIV(keyParameter, iv);
+        PaddedBufferedBlockCipher cipher = new PaddedBufferedBlockCipher(new CBCBlockCipher(new SM4Engine()), new PKCS7Padding());
+        cipher.init(true, parametersWithIV);
+        return processData(cipher, data);
+    }
+
+    /**
+     * SM4-CBC模式解密（16进制密文转明文）
+     * @param key 密钥（16字节）
+     * @param iv 初始化向量（16字节）
+     * @param cipherHex 16进制加密串
+     * @return 解密后的明文
+     * @throws Exception 解密异常
+     */
+    public static String sm4CbcDecrypt(String key, String iv, String cipherHex) throws Exception {
+        byte[] cipherData = Hex.decode(cipherHex);
+        byte[] plainData = sm4CbcDecrypt(
+                key.getBytes(StandardCharsets.UTF_8),
+                iv.getBytes(StandardCharsets.UTF_8),
+                cipherData
+        );
+        return new String(plainData, StandardCharsets.UTF_8);
+    }
+
+    /**
+     * SM4-CBC模式解密
+     * @param key 密钥（16字节）
+     * @param iv 初始化向量（16字节）
+     * @param cipherData 加密字节数组
+     * @return 解密后的字节数组
+     * @throws Exception 解密异常
+     */
+    public static byte[] sm4CbcDecrypt(byte[] key, byte[] iv, byte[] cipherData) throws Exception {
+        KeyParameter keyParameter = new KeyParameter(key);
+        ParametersWithIV parametersWithIV = new ParametersWithIV(keyParameter, iv);
+        PaddedBufferedBlockCipher cipher = new PaddedBufferedBlockCipher(new CBCBlockCipher(new SM4Engine()), new PKCS7Padding());
+        cipher.init(false, parametersWithIV);
+        return Hex.decode(processData(cipher, cipherData));
+    }
+
+    // 辅助方法：处理SM4加解密的字节数组
+    private static String processData(PaddedBufferedBlockCipher cipher, byte[] data) throws DataLengthException, IllegalStateException, InvalidCipherTextException {
+        int inputLen = data.length;
+        byte[] outBuf = new byte[cipher.getOutputSize(inputLen)];
+        int processedLen = cipher.processBytes(data, 0, inputLen, outBuf, 0);
+        processedLen += cipher.doFinal(outBuf, processedLen);
+        byte[] result = new byte[processedLen];
+        System.arraycopy(outBuf, 0, result, 0, processedLen);
+        return Hex.toHexString(result);
+    }
+
+    // ===================== 测试方法 =====================
+    public static void main(String[] args) throws Exception {
+        // 1. SM3测试
+        String sm3TestData = "测试SM3哈希";
+        String sm3Result = SMUtil.sm3(sm3TestData);
+        System.out.println("SM3哈希结果：" + sm3Result);
+
+        // 2. SM2测试
+        KeyPair sm2KeyPair = SMUtil.generateSM2KeyPair();
+        String sm2TestData = "测试SM2签名验签";
+        String sm2Sign = SMUtil.sm2Sign(sm2KeyPair.getPrivate(), sm2TestData);
+        boolean sm2VerifyResult = SMUtil.sm2Verify(sm2KeyPair.getPublic(), sm2TestData, sm2Sign);
+        System.out.println("SM2签名结果：" + sm2Sign);
+        System.out.println("SM2验签结果：" + sm2VerifyResult);
+
+        // 3. SM4-ECB测试
+        String sm4Key = "1234567890abcdef"; // 16字节密钥
+        String sm4TestData = "测试SM4-ECB加解密";
+        String sm4EcbEncrypt = SMUtil.sm4EcbEncrypt(sm4Key, sm4TestData);
+        String sm4EcbDecrypt = SMUtil.sm4EcbDecrypt(sm4Key, sm4EcbEncrypt);
+        System.out.println("SM4-ECB加密结果：" + sm4EcbEncrypt);
+        System.out.println("SM4-ECB解密结果：" + sm4EcbDecrypt);
+
+        // 4. SM4-CBC测试
+        String sm4Iv = "1234567890abcdef"; // 16字节IV
+        String sm4CbcEncrypt = SMUtil.sm4CbcEncrypt(sm4Key, sm4Iv, sm4TestData);
+        String sm4CbcDecrypt = SMUtil.sm4CbcDecrypt(sm4Key, sm4Iv, sm4CbcEncrypt);
+        System.out.println("SM4-CBC加密结果：" + sm4CbcEncrypt);
+        System.out.println("SM4-CBC解密结果：" + sm4CbcDecrypt);
+    }
+}
