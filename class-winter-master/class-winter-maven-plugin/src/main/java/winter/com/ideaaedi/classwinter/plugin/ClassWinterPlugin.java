@@ -60,6 +60,7 @@ public class ClassWinterPlugin extends AbstractMojo {
     @Parameter
     private String alreadyProtectedLibs;
     
+    
     @Parameter
     private String supportFile;
     
