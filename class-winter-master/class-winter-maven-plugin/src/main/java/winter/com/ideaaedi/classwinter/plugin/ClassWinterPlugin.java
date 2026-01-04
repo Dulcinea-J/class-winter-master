@@ -73,6 +73,8 @@ public class ClassWinterPlugin extends AbstractMojo {
     
     @Parameter(defaultValue = "false")
     private Boolean debug;
+
+    
     
     @Override
     @SuppressWarnings("RedundantThrows")
